@@ -20,7 +20,7 @@ Pod::Spec.new do |s|
     s.swift_version = "5.0"
     s.platform     = :ios, "10.0"
     
-    s.dependency 'GTMAppAuth', '~> 1.1.0'
+    s.dependency 'GTMAppAuth', '~> 4.1.1'
     s.dependency 'AppAuth', '~> 1.4'
     s.dependency 'Moya', '~> 14.0'
     s.dependency 'ObjectMapper', '~> 4.2'
