@@ -78,7 +78,7 @@ internal struct Strings {
     static let lastTokenRefresh = "lastTokenRefresh"
     
     static var photosAccessToken: String { get {
-        return GPhotos.authorization?.authState.lastTokenResponse?.accessToken ?? ""
+        return GPhotos.authState?.lastTokenResponse?.accessToken ?? ""
     } }
 }
 
@@ -110,7 +110,7 @@ internal struct Google {
     }()
 
     static internal var currentScopes: [AuthScope] { get {
-        return (GPhotos.authorization?.authState.scope ?? "")
+        return (GPhotos.authState?.scope ?? "")
             .split(separator: " ")
             .compactMap({ AuthScope(rawValue: String($0)) })
     } }
