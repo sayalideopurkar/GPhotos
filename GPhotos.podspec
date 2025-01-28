@@ -18,7 +18,7 @@ Pod::Spec.new do |s|
     s.source_files  = "GPhotos/**/*"
     # s.exclude_files = "GPhotosTests/*.swift"
     s.swift_version = "5.0"
-    s.platform     = :ios, "11.0"
+    s.platform     = :ios, "12.0"
     
     s.dependency 'GTMAppAuth', '~> 4.1.1'
     s.dependency 'AppAuth', '~> 1.4'
