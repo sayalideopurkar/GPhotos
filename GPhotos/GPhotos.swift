@@ -9,11 +9,12 @@
 import UIKit
 import GTMAppAuth
 import AppAuth
+import GTMSessionFetcher
 
 public class GPhotos {
     
     internal static var currentAuthFlow: OIDExternalUserAgentSession?
-    internal static var authorization: GTMAppAuthFetcherAuthorization?
+    internal static var authState: OIDAuthState?
     internal static var configuration: OIDServiceConfiguration?
     internal static var fetcherService = GTMSessionFetcherService()
 
@@ -31,8 +32,15 @@ public class GPhotos {
             config.printLogs = configuration.printLogs
         }
         
-        authorization = GTMAppAuthFetcherAuthorization(fromKeychainForName: Strings.keychainName)
-        self.configuration = GTMAppAuthFetcherAuthorization.configurationForGoogle()
+        // Load authorization from keychain
+        if let authStateData = KeychainManager.load(forKey: Strings.keychainName),
+           let state = try? NSKeyedUnarchiver.unarchivedObject(ofClass: OIDAuthState.self, from: authStateData) {
+            self.authState = state
+        } else {
+            print("No authorization found in keychain")
+        }
+
+        self.configuration = AuthSession.configurationForGoogle()
         initialized = true
         
         refreshToken()
@@ -66,9 +74,9 @@ public class GPhotos {
     public static func logout() {
         validate()
         currentAuthFlow = nil
-        authorization = nil
-        GTMAppAuthFetcherAuthorization.removeFromKeychain(forName: Strings.keychainName)
-    }
+        authState = nil
+        KeychainManager.delete(forKey: Strings.keychainName)
+        print("Authorization state removed from keychain")    }
 }
 
 // MARK:- Internal functions
@@ -105,16 +113,20 @@ internal extension GPhotos {
     static func refreshToken(completion: (()->())? = nil) {
         // Do a dummy call and GTMSessionFetcherService will take care of refreshing the token
         background {
-            self.fetcherService.authorizer = self.authorization
+            guard let authState = self.authState else {
+                log.e("Authorization state is nil.")
+                completion?()
+                return
+            }
             if let tokenEndpoint = self.configuration?.tokenEndpoint {
                 let fetcher = self.fetcherService.fetcher(with: tokenEndpoint)
                 fetcher.beginFetch(completionHandler: { (data, error) in
                     if let error = error as NSError?,
-                        error.domain == OIDOAuthTokenErrorDomain {
+                       error.domain == OIDOAuthTokenErrorDomain {
                         log.e("Authorization error during token refresh.")
-                        self.authorization = nil
+                        self.authState = nil
                     }
-                    
+
                     defaults.setValue(Date().timeIntervalSinceReferenceDate,
                                       forKey: Strings.lastTokenRefresh)
                     completion?()
@@ -185,19 +197,23 @@ fileprivate extension GPhotos {
         main {
             currentAuthFlow = OIDAuthState.authState(byPresenting: request, presenting: topVC!) { (state, error) in
                 guard let state = state else {
-                    self.authorization = nil
-                    completion?(success, error)
+                    self.authState = nil
+                    completion?(false, error)
                     return
                 }
-                
-                let auth = GTMAppAuthFetcherAuthorization(authState: state)
-                self.authorization = auth
-                defaults.setValue(Date().timeIntervalSinceReferenceDate,
-                                  forKey: Strings.lastTokenRefresh)
-                // Serialize to Keychain
-                success = GTMAppAuthFetcherAuthorization.save(auth, toKeychainForName: Strings.keychainName)
-                if !success { log.e("Could not save in keychain.") }
-                completion?(success, error)
+
+                // Save the state locally
+                self.authState = state
+
+                // Store the state in the keychain
+                if let authStateData = try? NSKeyedArchiver.archivedData(withRootObject: state, requiringSecureCoding: false) {
+                    KeychainManager.save(data: authStateData, forKey: Strings.keychainName)
+                    UserDefaults.standard.setValue(Date().timeIntervalSinceReferenceDate, forKey: Strings.lastTokenRefresh)
+                    completion?(true, nil)
+                } else {
+                    log.e("Failed to archive auth state")
+                    completion?(false, nil)
+                }
             }
         }
 
